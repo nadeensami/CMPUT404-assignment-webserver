@@ -32,6 +32,9 @@ from os.path import isdir
 class MyWebServer(socketserver.BaseRequestHandler):
     
     def handle(self):
+        '''
+
+        '''
         # Capture and parse the request
         request = self.request.recv(1024).strip()
         self.parse_request(request)
@@ -59,14 +62,18 @@ class MyWebServer(socketserver.BaseRequestHandler):
 
     def respond(self, content):
         # If there is a 301 error, redirect by providing correct location
+        location = ""
         if "301" in content["status"]:
             path = self.data["Path"]
             host = self.data["Host"]
             location = f"Location: http://{host}{path}/\r\n"
-        else:
-            location = ""
+
+        # Deal with cases where the mime type is not dealt with
+        content_type = ""
+        if content['type']:
+            content_type = f"Content-Type: {content['type']}\r\n"
         
-        response = f"HTTP/1.1 {content['status']}\r\n{location}Content-Length: {content['length']}\r\nContent-Type: {content['type']}\r\n\r\n{content['string']}"
+        response = f"HTTP/1.1 {content['status']}\r\n{location}Content-Length: {content['length']}\r\n{content_type}\r\n{content['string']}"
 
         # Send response
         self.request.sendall(bytearray(response, "utf-8"))
@@ -113,12 +120,15 @@ class MyWebServer(socketserver.BaseRequestHandler):
 
         # Get mime datatype
         extension = curr_path.split(".")[-1]
+        mimetype = None
+        if extension in ("html", "css"):
+            mimetype = f"text/{extension}"
 
         # Format content in a dict
         content = {
             "status": "200 OK",
             "length": len(content_string),
-            "type": f"text/{extension}",
+            "type": mimetype,
             "string": content_string
         }
 
