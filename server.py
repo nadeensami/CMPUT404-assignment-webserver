@@ -2,6 +2,7 @@
 import socketserver
 from os import listdir
 from os.path import isdir
+from datetime import datetime, timezone
 
 # Copyright 2013 Abram Hindle, Eddie Antonio Santos
 # 
@@ -63,7 +64,8 @@ class MyWebServer(socketserver.BaseRequestHandler):
         request = request.decode("utf-8").split("\r\n")
 
         # Initialize data as a dictionary
-        self.data = {"Method": request[0].split(" ")[0], "Path": request[0].split(" ")[1]}
+        req_line = request[0].split(" ")
+        self.data = {"Method": req_line[0], "Path": req_line[1], "Version": req_line[2]}
 
         # Add key-value pairs for all headers
         for i in range(1, len(request)):
@@ -86,8 +88,9 @@ class MyWebServer(socketserver.BaseRequestHandler):
         # Get response content
         content = self.get_content()
 
-        # Corret HTTP version
-        version = "HTTP/1.1"
+        # Get the date
+        now = datetime.now(timezone.utc)
+        date = now.strftime("%a, %d %b %Y %H:%M:%S GMT")
 
         # If there is a 301 error, redirect by providing correct location
         location = ""
@@ -95,13 +98,8 @@ class MyWebServer(socketserver.BaseRequestHandler):
             path = self.data["Path"]
             host = self.data["Host"]
             location = f"Location: http://{host}{path}/\r\n"
-
-        # Deal with cases where the mime type is not dealt with
-        content_type = ""
-        if content['type']:
-            content_type = f"Content-Type: {content['type']}\r\n"
         
-        response = f"{version} {content['status']}\r\n{location}Content-Length: {content['length']}\r\n{content_type}\r\n{content['string']}"
+        response = f"{self.data['Version']} {content['status']}\r\nDate: {date}\r\n{location}Content-Length: {content['length']}\r\nContent-Type: {content['type']}\r\nConnection: close\r\n\r\n{content['string']}"
 
         # Return response
         return response
@@ -161,7 +159,7 @@ class MyWebServer(socketserver.BaseRequestHandler):
 
         # Get mime datatype
         extension = curr_path.split(".")[-1]
-        mimetype = None
+        mimetype = "application/octet-stream"
         if extension in ("html", "css"):
             mimetype = f"text/{extension}"
 
