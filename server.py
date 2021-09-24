@@ -33,19 +33,32 @@ class MyWebServer(socketserver.BaseRequestHandler):
     
     def handle(self):
         '''
+        Main handling function of webserver. Given a request,
+        it parses it, generates a response, and sends the response.
 
+        Args:
+            self (MyWebServer): Webserver object that receives requests
+                and sends responses
         '''
         # Capture and parse the request
         request = self.request.recv(1024).strip()
         self.parse_request(request)
 
-        # Get response content
-        content = self.get_content()
+        # Get response
+        response = self.respond()
 
         # Send response
-        self.respond(content)
+        self.request.sendall(bytearray(response, "utf-8"))
     
     def parse_request(self, request):
+        '''
+        Given a request, parses the data and formats and stores it
+        in a dictionary attribute.
+
+        Args:
+            self (MyWebServer): Object to store formated request
+            request (bytes): Request body to parse and format
+        '''
         # Decode request and split by newlines
         request = request.decode("utf-8").split("\r\n")
 
@@ -60,7 +73,22 @@ class MyWebServer(socketserver.BaseRequestHandler):
             else:
                 self.data[header[0]] = header[0]
 
-    def respond(self, content):
+    def respond(self):
+        '''
+        Generates and returns a valid HTTP response string.
+
+        Args:
+            self (MyWebServer): Object that has data from request
+
+        Returns:
+            str: a valid HTTP response string
+        '''
+        # Get response content
+        content = self.get_content()
+
+        # Corret HTTP version
+        version = "HTTP/1.1"
+
         # If there is a 301 error, redirect by providing correct location
         location = ""
         if "301" in content["status"]:
@@ -73,12 +101,26 @@ class MyWebServer(socketserver.BaseRequestHandler):
         if content['type']:
             content_type = f"Content-Type: {content['type']}\r\n"
         
-        response = f"HTTP/1.1 {content['status']}\r\n{location}Content-Length: {content['length']}\r\n{content_type}\r\n{content['string']}"
+        response = f"{version} {content['status']}\r\n{location}Content-Length: {content['length']}\r\n{content_type}\r\n{content['string']}"
 
-        # Send response
-        self.request.sendall(bytearray(response, "utf-8"))
+        # Return response
+        return response
 
     def get_content(self):
+        '''
+        Generates content based on the request, by either giving an error page
+        or file content if non-erroneous.
+
+        Args:
+            self (MyWebServer): Object that has data from request
+
+        Returns:
+            dict: Dictionary of content status, length, type, and string
+
+        References:
+            stackoverflow.com user pycruft, https://stackoverflow.com/users/346573/pycruft,
+            Answer for "How do I list all files of a directory?", https://stackoverflow.com/a/3207973
+        '''
         # Get path and method from data
         path = self.data["Path"]
         method = self.data["Method"]
@@ -101,7 +143,6 @@ class MyWebServer(socketserver.BaseRequestHandler):
         curr_path = "www/"
 
         # Handle 404 Errors
-        # https://stackoverflow.com/questions/3207219/how-do-i-list-all-files-of-a-directory
         for i in range(0, len(path_list)):
             if path_list[i] not in listdir(curr_path):
                 return self.error_content("404 Not Found")
@@ -135,6 +176,17 @@ class MyWebServer(socketserver.BaseRequestHandler):
         return content
     
     def error_content(self, status_code):
+        '''
+        Given an error status code, returns a content dictionary
+        with a basic HTML string with the error
+
+        Args:
+            self (MyWebServer): Object that has data from request
+            status_code (str): HTTP status code of response
+
+        Returns:
+            dict: Dictionary of content status, length, type, and string
+        '''
         # Create a basic HTML page with the error
         content_string = f"""<!DOCTYPE html>
             <html lang="en">
