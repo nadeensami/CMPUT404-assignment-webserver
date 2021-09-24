@@ -32,37 +32,54 @@ from os.path import isdir
 class MyWebServer(socketserver.BaseRequestHandler):
     
     def handle(self):
-        # Decode request and split by newlines
-        self.data = self.request.recv(1024).strip().decode("utf-8").split("\r\n")        
-        # print ("Got a request of: %s\n" % self.data)
+        # Capture and parse the request
+        request = self.request.recv(1024).strip()
+        self.parse_request(request)
 
-        # Use the request line to get the method and path
-        request_line = self.data[0].split(" ")
-        method = request_line[0]
-        path = request_line[1]
+        # Get response content
+        content = self.get_content()
 
-        if method.upper() != "GET":
-            # Handle 405 Errors
-            content = self.error_content("405 Method Not Allowed")
-        else:
-            content = self.get_content(path)
-
+        # Send response
         self.respond(content)
+    
+    def parse_request(self, request):
+        # Decode request and split by newlines
+        request = request.decode("utf-8").split("\r\n")
+
+        # Initialize data as a dictionary
+        self.data = {"Method": request[0].split(" ")[0], "Path": request[0].split(" ")[1]}
+
+        # Add key-value pairs for all headers
+        for i in range(1, len(request)):
+            header = request[i].split(": ", 1)
+            if len(header) > 1:
+                self.data[header[0]] = header[1]
+            else:
+                self.data[header[0]] = header[0]
 
     def respond(self, content):
-        location = ""
+        # If there is a 301 error, redirect by providing correct location
         if "301" in content["status"]:
-            path = self.data[0].split(" ")[1]
-            host = self.data[1].split(" ")[1]
+            path = self.data["Path"]
+            host = self.data["Host"]
             location = f"Location: http://{host}{path}/\r\n"
+        else:
+            location = ""
         
-        response = f"""HTTP/1.1 {content['status']}\r\n{location}Content-Length: {content['length']}\r\nContent-Type: {content['type']}\r\n\r\n{content['string']}"""
-        
-        # print(f"Response: {response}")
+        response = f"HTTP/1.1 {content['status']}\r\n{location}Content-Length: {content['length']}\r\nContent-Type: {content['type']}\r\n\r\n{content['string']}"
 
+        # Send response
         self.request.sendall(bytearray(response, "utf-8"))
 
-    def get_content(self, path):
+    def get_content(self):
+        # Get path and method from data
+        path = self.data["Path"]
+        method = self.data["Method"]
+ 
+        # Handle 405 Errors
+        if method.upper() != "GET":
+            return self.error_content("405 Method Not Allowed")
+
         # Parse the path
         path_list = path.split("/")
 
@@ -79,7 +96,6 @@ class MyWebServer(socketserver.BaseRequestHandler):
         # Handle 404 Errors
         # https://stackoverflow.com/questions/3207219/how-do-i-list-all-files-of-a-directory
         for i in range(0, len(path_list)):
-            # Deal with 404 error
             if path_list[i] not in listdir(curr_path):
                 return self.error_content("404 Not Found")
             curr_path += path_list[i]
@@ -97,22 +113,19 @@ class MyWebServer(socketserver.BaseRequestHandler):
 
         # Get mime datatype
         extension = curr_path.split(".")[-1]
-        mime_type = self.get_mime_type(extension)
 
         # Format content in a dict
-        content = {"status": "200 OK", 
-                "length": len(content_string), 
-                "type": mime_type, 
-                "string": content_string}
+        content = {
+            "status": "200 OK",
+            "length": len(content_string),
+            "type": f"text/{extension}",
+            "string": content_string
+        }
 
         return content
     
-    def get_mime_type(self, extension):
-        if extension in ("html", "css"):
-            return f"text/{extension}"
-    
     def error_content(self, status_code):
-        #https://developer.mozilla.org/en-US/docs/Web/HTTP/Status
+        # Create a basic HTML page with the error
         content_string = f"""<!DOCTYPE html>
             <html lang="en">
                 <head>
@@ -126,10 +139,13 @@ class MyWebServer(socketserver.BaseRequestHandler):
                 </body>
             </html>"""
         
-        content = {"status": status_code, 
-                "length": len(content_string), 
-                "type": "text/html", 
-                "string": content_string}
+        # Format content in a dict
+        content = {
+            "status": status_code,
+            "length": len(content_string),
+            "type": "text/html",
+            "string": content_string
+        }
         
         return content
 
